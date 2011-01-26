@@ -14,7 +14,7 @@
 -export ([save/2, replace/3, repsert/3, modify/3]).
 -export ([delete/2, delete_one/2]).
 -export ([find_one/2, find_one/3, find_one/4]).
--export ([find/2, find/3, find/4, find/5]).
+-export ([find/2, find/3, find/4, find/5, find/6]).
 -export ([count/2, count/3]).
 
 -export_type ([cursor/0]).
@@ -191,12 +191,16 @@ find (Coll, Selector, Projector) -> find (Coll, Selector, Projector, 0).
 % Return projection of selected documents starting from Nth document. Empty projection means full projection.
 find (Coll, Selector, Projector, Skip) -> find (Coll, Selector, Projector, Skip, 0).
 
+find (Coll, Selector, Projector, Skip, BatchSize) ->
+    find (Coll, Selector, Projector, Skip, BatchSize, {}).
+
 -spec find (collection(), selector(), projector(), skip(), batchsize()) -> cursor(). % Action
 % Return projection of selected documents starting from Nth document in batches of batchsize. 0 batchsize means default batch size. Negative batch size means one batch only. Empty projection means full projection.
-find (Coll, Selector, Projector, Skip, BatchSize) ->
+find (Coll, Selector, Projector, Skip, BatchSize, OrderBy) ->
 	Context = get (mongo_action_context),
 	Query = #'query' {
-		collection = Coll, selector = Selector, projector = Projector,
+		collection = Coll, selector = {'query', Selector, orderby,
+            OrderBy}, projector = Projector,
 		skip = Skip, batchsize = BatchSize, slaveok = slave_ok (Context) },
 	mongo_query:find (Context #context.dbconn, Query).
 
