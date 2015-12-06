@@ -15,7 +15,7 @@
 -export ([insert/2, insert_all/2]).
 -export ([save/2, replace/3, repsert/3, modify/3]).
 -export ([delete/2, delete_one/2]).
--export ([find_one/2, find_one/3, find_one/4]).
+-export ([find_one/5, find_one/3, find_one/4]).
 -export ([find/2, find/3, find/4, find/5]).
 -export ([count/2, count/3]).
 
@@ -151,6 +151,8 @@ this_db () -> {Db, _} = (get (mongo_action_context)) #context.dbconn, Db.
 
 -spec write (mongo_query:write()) -> ok. % Action
 %@doc Do unsafe unacknowledged fast write or safe acknowledged slower write depending on our context. When safe, throw write_failure if acknowledgment (getlasterror) reports error.
+
+
 write (Write) ->
 	Context = get (mongo_action_context),
 	case Context #context.write_mode of
@@ -219,28 +221,29 @@ delete_one (Coll, Selector) ->
 % Every query inside an action() will use this mode.
 % master = Server must be master/primary so reads are consistent (read latest writes).
 % slave_ok = Server may be slave/secondary so reads may not be consistent (may read stale data). Slaves will eventually get the latest writes, so technically this is called eventually-consistent.
-
+%@modified add undefined 2015/12/6
+slave_ok (undefined) -> false;
 slave_ok (#context {read_mode = slave_ok}) -> true;
 slave_ok (#context {read_mode = master}) -> false.
 
 -type maybe(A) :: {A} | {}.
 
--spec find_one (collection(), selector()) -> maybe (bson:document()). % Action
+-spec find_one (mongo_connect:dbconnection(),collection(), selector()) -> maybe (bson:document()). % Action
 %@doc Return first selected document, if any
-find_one (Coll, Selector) -> find_one (Coll, Selector, []).
+find_one (DbConn, Coll, Selector) -> find_one (DbConn, Coll, Selector, []).
 
--spec find_one (collection(), selector(), projector()) -> maybe (bson:document()). % Action
+-spec find_one (mongo_connect:dbconnection(),collection(), selector(), projector()) -> maybe (bson:document()). % Action
 %@doc Return projection of first selected document, if any. Empty projection [] means full projection.
-find_one (Coll, Selector, Projector) -> find_one (Coll, Selector, Projector, 0).
+find_one (DbConn, Coll, Selector, Projector) -> find_one (DbConn, Coll, Selector, Projector, 0).
 
--spec find_one (collection(), selector(), projector(), skip()) -> maybe (bson:document()). % Action
+-spec find_one (mongo_connect:dbconnection(),collection(), selector(), projector(), skip()) -> maybe (bson:document()). % Action
 %@doc Return projection of Nth selected document, if any. Empty projection [] means full projection.
-find_one (Coll, Selector, Projector, Skip) ->
+find_one (DbConn, Coll, Selector, Projector, Skip) ->
 	Context = get (mongo_action_context),
 	Query = #'query' {
 		collection = Coll, selector = Selector, projector = Projector,
 		skip = Skip, slaveok = slave_ok (Context) },
-	mongo_query:find_one (Context #context.dbconn, Query).
+	mongo_query:find_one (DbConn, Query).
 
 -spec find (collection(), selector()) -> cursor(). % Action
 %@doc Return selected documents.
@@ -329,10 +332,12 @@ binary_to_hexstr (Bin) ->
 
 -spec add_user (permission(), username(), password()) -> ok. % Action
 %@doc Add user with given access rights (permission)
+%%can't be used before put
 add_user (Permission, Username, Password) ->
-	User = case find_one (system.users, {user, Username}) of {} -> {user, Username}; {Doc} -> Doc end,
+	DbConn=(get (mongo_action_context)) #context.dbconn,
+	User = case find_one (DbConn,'system.users', {user, Username}) of {} -> {user, Username}; {Doc} -> Doc end,
 	Rec = {readOnly, case Permission of read_only -> true; read_write -> false end, pwd, pw_hash (Username, Password)},
-	save (system.users, bson:merge (Rec, User)).
+	save ('system.users', bson:merge (Rec, User)).
 
 % Index %
 
